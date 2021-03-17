@@ -141,7 +141,7 @@ ModbusIP modbusTCPServerNode;  //ModbusIP object
 AsyncWebServer server(80);    // Create AsyncWebServer instance on port "80"
 AsyncWebSocket ws("/ws");     // Create WebSocket instance on URL "/ws"
 NtpClient ntp;
-EvseWiFiConfig config = EvseWiFiConfig();
+EvseWiFiConfig config = EvseWiFiConfig("/config.json");
 EvseWiFiRfid rfid;
 
 
@@ -301,10 +301,10 @@ String ICACHE_FLASH_ATTR printIP(IPAddress address) {
 bool ICACHE_FLASH_ATTR setSmartWb11kWSettings() {
   //Load and Save config file for smartWB
   if (config.saveConfigFile(SRC_CONFIG_TEMPLATE_SMARTWB11KW)) {
-    Serial.println("[ Auto-Config ] config.json for smartWB 11kW successfully loaded and saved");
+    Serial.println("[ Auto-Config ] config file for smartWB 11kW successfully loaded and saved");
   }
   else {
-    Serial.println("[ Auto-Config ] [ !!! ] Error while loading config.json for smartWB 11kW!");
+    Serial.println("[ Auto-Config ] [ !!! ] Error while loading config file for smartWB 11kW!");
   }
 
 // Setting EVSE Registers for smartWB 11kW
@@ -518,7 +518,7 @@ bool ICACHE_FLASH_ATTR resetUserData() {
 
 bool ICACHE_FLASH_ATTR factoryReset() {
   if (config.getSystemDebug()) Serial.println("[ SYSTEM ] Factory Reset...");
-  SPIFFS.remove("/config.json");
+  config.factoryReset();
   initLogFile();
   if (resetUserData()) {
     if (config.getSystemDebug()) Serial.println("[ SYSTEM ] ...successfully done - going to reboot");
@@ -1688,7 +1688,7 @@ void ICACHE_FLASH_ATTR processWsEvent(JsonDocument& root, AsyncWebSocketClient *
     fsWorking = false;
   }
   else if (strcmp(command, "configfile") == 0) {
-    if (config.getSystemDebug()) Serial.println("[ SYSTEM ] Try to update config.json...");
+    if (config.getSystemDebug()) Serial.println("[ SYSTEM ] Try to update config file...");
     String configString;
     serializeJson(root, configString);
 

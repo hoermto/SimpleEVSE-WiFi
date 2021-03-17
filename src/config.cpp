@@ -2,6 +2,29 @@
 #include "templates.h"
 #include <string.h>
 
+EvseWiFiConfig::EvseWiFiConfig(const String cfgFile)
+    : configFileName(cfgFile) {
+#ifdef ESP32
+    modbusConfig.enabled = true;
+    modbusConfig.rxPin = 22;
+    modbusConfig.txPin = 21;
+    evseConfig[0].useModbus = true;
+    evseConfig[0].serialRxPin = 22; // ignored with using modbus
+    evseConfig[0].serialTxPin = 21; // ignored with using modbus
+    evseConfig[0].alwaysactive = false;
+#endif
+    if (configFileName == "") {
+        configFileName = "/config.json";
+    }
+};
+
+// deletes configuration file and restores
+// configuration as initial start
+bool ICACHE_FLASH_ATTR EvseWiFiConfig::factoryReset() {
+    SPIFFS.remove(configFileName);
+    return true;
+}
+
 bool ICACHE_FLASH_ATTR EvseWiFiConfig::loadConfig(String givenConfig) {
     String jsonString;
     bool loadDefault = false;
@@ -9,13 +32,13 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::loadConfig(String givenConfig) {
     pre_0_4_Config = false;
     
     if (givenConfig != "") {
-        Serial.println("loadConfig: given config string...");
+        Serial.println("loadConfig: given config string ...");
         jsonString = givenConfig;
     }
     else {
         //SPIFFS.begin();
         Serial.println("loadConfig: no config string given -> check config file");
-        File configFile = SPIFFS.open("/config.json", "r");
+        File configFile = SPIFFS.open(configFileName, "r");
         #ifdef ESP8266
         if (!configFile) {
             Serial.println("loading config file failed");
@@ -24,7 +47,8 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::loadConfig(String givenConfig) {
         #else
         if (!configFile.available()) {
             configFile.close();
-            Serial.println("loading config file failed - rebuild factory settings");
+            Serial.println("loading config file failed - rebuild factory settings: ");
+            Serial.println(configFileName);
             loadDefault = true;
         }
         #endif
@@ -121,8 +145,39 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::loadConfig(String givenConfig) {
     }
     Serial.println("SYSTEM loaded");
 
-   // evseConfig
+#ifdef ESP32
+    // modbus config
+    if (jsonDoc.containsKey("modbus"))
+    {
+        modbusConfig.enabled = jsonDoc["modbus"]["enabled"];
+        modbusConfig.rxPin = jsonDoc["modbus"]["rxpin"];
+        modbusConfig.txPin = jsonDoc["modbus"]["txpin"];
+    } else {
+        // EVSE-Wifi v2.0 uses hardwareserial on 22/21 (D1/D2)
+        modbusConfig.enabled = true;
+        modbusConfig.rxPin = 22;
+        modbusConfig.txPin = 21;
+    }
+    Serial.println("MODBUS loaded");
+#endif
+
+    // evseConfig
     evseConfig[0].mbid = 1;
+#ifdef ESP32
+    if (jsonDoc["evse"][0].containsKey("usemodbus"))
+    {
+        evseConfig[0].useModbus = jsonDoc["evse"][0]["usemodbus"];
+        evseConfig[0].serialRxPin = jsonDoc["evse"][0]["serialrxpin"];
+        evseConfig[0].serialTxPin = jsonDoc["evse"][0]["serialtxpin"];
+    } else {
+        // use defaults
+        // v2.0 used modbus interface. Pins will be ignored here, if useModbus = true
+        // otherwise a hardware serial with given pins will be used
+        evseConfig[0].useModbus = true;
+        evseConfig[0].serialRxPin = 22;   // not used when useModbus == true
+        evseConfig[0].serialTxPin = 21;   // not used when useModbus == true
+    }
+#endif
     evseConfig[0].alwaysactive = jsonDoc["evse"][0]["alwaysactive"];
 
     evseConfig[0].resetcurrentaftercharge = jsonDoc["evse"][0]["resetcurrentaftercharge"];
@@ -171,6 +226,7 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::loadConfig(String givenConfig) {
 
     return true;
 }
+
 bool ICACHE_FLASH_ATTR EvseWiFiConfig::loadConfiguration() {
     // meterConfig
     useMMeter = false;
@@ -200,7 +256,7 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::loadConfiguration() {
 }
 bool ICACHE_FLASH_ATTR EvseWiFiConfig::printConfigFile() {
     //SPIFFS.begin();
-    File configFile = SPIFFS.open("/config.json", "r");
+    File configFile = SPIFFS.open(configFileName, "r");
     if (!configFile) {
         return false;
     }
@@ -265,8 +321,19 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::printConfig() {
     Serial.println("logging: " + String(getSystemLogging()));
     Serial.println("api: " + String(getSystemApi()));
     Serial.println("configversion: " + String(getSystemConfigVersion()));
+#ifdef ESP32
+    Serial.println("// MODBUS Config");
+    Serial.println("enabled: " + String(getModbusTxPin()));
+    Serial.println("rxpin: " + String(getModbusRxPin()));
+    Serial.println("txpin: " + String(getModbusRxPin()));
+#endif
     Serial.println("// EVSE Config");
     Serial.println("mbid: " + String(getEvseMbid(0)));
+#ifdef ESP32
+    Serial.println("useModbus: " + String(getEvseUseModbus(0)));
+    Serial.println("rxpin: " + String(getEvseSerialRxPin(0)));
+    Serial.println("txpin: " + String(getEvseSerialTxPin(0)));
+#endif
     Serial.println("alwaysactive: " + String(getEvseAlwaysActive(0)));
     Serial.println("remote: " + String(getEvseRemote(0)));
     Serial.println("ledconfig: " + String(getEvseLedConfig(0)));
@@ -358,9 +425,20 @@ String ICACHE_FLASH_ATTR EvseWiFiConfig::getConfigJson() {
     systemItem["logging"] = this->getSystemLogging();
     systemItem["api"] = this->getSystemApi();
 
+#ifdef ESP32
+    JsonObject modbusItem = rootDoc.createNestedObject("modbus");
+    modbusItem["enabled"] = this->getModbusEnabled();
+    modbusItem["rxpin"] = this->getModbusRxPin();
+    modbusItem["txpin"] = this->getModbusTxPin();
+#endif
     JsonArray evseArray = rootDoc.createNestedArray("evse");
     JsonObject evseObject_0 = evseArray.createNestedObject();
     evseObject_0["mbid"] = this->getEvseMbid(0);
+#ifdef ESP32
+    evseObject_0["usemodbus"] = this->getEvseUseModbus(0);
+    evseObject_0["serialrxpin"] = this->getEvseSerialRxPin(0);
+    evseObject_0["serialtxpin"] = this->getEvseSerialTxPin(0);
+#endif
     evseObject_0["alwaysactive"] = this->getEvseAlwaysActive(0);
     evseObject_0["remote"] = this->getEvseRemote(0);
     evseObject_0["ledconfig"] = this->getEvseLedConfig(0);
@@ -370,7 +448,7 @@ String ICACHE_FLASH_ATTR EvseWiFiConfig::getConfigJson() {
     evseObject_0["avgconsumption"] = this->getEvseAvgConsumption(0);
     evseObject_0["rseactive"] = this->getEvseRseActive(0);
     evseObject_0["rsevalue"] = this->getEvseRseValue(0);
-    
+
     String sReturn;
     serializeJsonPretty(rootDoc, sReturn);
     return sReturn;
@@ -397,7 +475,7 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::checkUpdateConfig(String jsonString, bool
             Serial.println("[ ERROR ] Register 2005 could not be set (switch from AA/Remote to normal mode)");
             return false;
         } 
-    }
+    }   
     else {
         if (this->getSystemDebug()) Serial.println("[ SYSTEM ] No Register to Set (switch from AA/Remote to normal mode)");
     }
@@ -418,7 +496,7 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::saveConfigFile(String jsonString) {
     if (error) return false;
 
     //SPIFFS.begin();
-    File configFile = SPIFFS.open("/config.json", "w+");
+    File configFile = SPIFFS.open(configFileName, "w+");
     if (configFile) {
         if (jsonDoc.containsKey("command")) {
             jsonDoc.remove("command");
@@ -427,7 +505,7 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::saveConfigFile(String jsonString) {
         configFile.close();
 
         //Check config file exists
-        configFile = SPIFFS.open("/config.json", "r");
+        configFile = SPIFFS.open(configFileName, "r");
         if (configFile) {
             if (systemConfig.debug) {
                 Serial.println("[ SYSTEM ] New config file created:");
@@ -608,6 +686,19 @@ uint8_t ICACHE_FLASH_ATTR EvseWiFiConfig::getEvseMbid(uint8_t evseId) {
 bool ICACHE_FLASH_ATTR EvseWiFiConfig::getEvseAlwaysActive(uint8_t evseId) {
     return evseConfig[evseId].alwaysactive;
 }
+
+#ifdef ESP32
+bool ICACHE_FLASH_ATTR EvseWiFiConfig::getEvseUseModbus(uint8_t evseId) {
+    return evseConfig[evseId].useModbus;
+}
+uint8_t ICACHE_FLASH_ATTR EvseWiFiConfig::getEvseSerialRxPin(uint8_t evseId) {
+    return evseConfig[evseId].serialRxPin;
+}
+uint8_t ICACHE_FLASH_ATTR EvseWiFiConfig::getEvseSerialTxPin(uint8_t evseId) {
+    return evseConfig[evseId].serialTxPin;
+}
+#endif
+
 bool ICACHE_FLASH_ATTR EvseWiFiConfig::getEvseRemote(uint8_t evseId) {
     return evseConfig[evseId].remote;
 }

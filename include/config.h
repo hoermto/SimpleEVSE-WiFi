@@ -3,6 +3,10 @@
 
 #ifdef ESP8266
 #include <FS.h>
+#ifndef RX
+#define RX 3
+#define TX 1
+#endif
 #else
 #include <SPIFFS.h>
 #endif
@@ -63,8 +67,23 @@ struct s_systemConfig {
     bool api;
 };
 
+#ifdef ESP32
+// modbus can be connected over txd/rxd (EVSE-WIFI 1.0 / 8266 default)
+// or using hardware serial using IO22 / IO21
+struct s_modbusConfig {
+    bool enabled;
+    uint8_t rxPin;
+    uint8_t txPin;
+};
+#endif
+
 struct s_evseConfig {
-    uint8_t mbid;
+    uint8_t mbid;           // modbus id
+#ifdef ESP32
+    bool useModbus;         // connected via modbus? then mbid is relevant
+    uint8_t serialRxPin;    // for serial, if not using modbus
+    uint8_t serialTxPin;    // for serial, if not using modbus
+#endif
     bool alwaysactive;
     bool remote;
     uint8_t ledconfig;
@@ -78,6 +97,8 @@ struct s_evseConfig {
 
 class EvseWiFiConfig {
 public:
+    EvseWiFiConfig(const String cfgFile);
+
     bool ICACHE_FLASH_ATTR loadConfig(String = "");
     bool ICACHE_FLASH_ATTR loadConfiguration();
     bool ICACHE_FLASH_ATTR printConfigFile();
@@ -87,6 +108,7 @@ public:
     bool ICACHE_FLASH_ATTR updateConfig(String);
     String ICACHE_FLASH_ATTR getConfigJson();
     bool ICACHE_FLASH_ATTR saveConfigFile(String jsonConfig);
+    bool ICACHE_FLASH_ATTR factoryReset();
 
 // wifiConfig
     const char * ICACHE_FLASH_ATTR getWifiBssid();
@@ -140,8 +162,21 @@ public:
     bool ICACHE_FLASH_ATTR getSystemLogging();
     bool ICACHE_FLASH_ATTR getSystemApi();
 
+#ifdef ESP32
+// modbus config
+    bool getModbusEnabled() { return modbusConfig.enabled; };
+    uint8_t getModbusRxPin() { return modbusConfig.rxPin; };
+    uint8_t getModbusTxPin() { return modbusConfig.txPin; };
+#endif
+
 // evseConfig
     uint8_t ICACHE_FLASH_ATTR getEvseMbid(uint8_t evseId);
+#ifdef ESP32
+    bool ICACHE_FLASH_ATTR getEvseUseModbus(uint8_t evseId);
+    uint8_t ICACHE_FLASH_ATTR getEvseSerialRxPin(uint8_t evseId);
+    uint8_t ICACHE_FLASH_ATTR getEvseSerialTxPin(uint8_t evseId);
+#endif
+
     bool ICACHE_FLASH_ATTR getEvseAlwaysActive(uint8_t evseId);
     bool ICACHE_FLASH_ATTR getEvseRemote(uint8_t evseId);
     uint8_t ICACHE_FLASH_ATTR getEvseLedConfig(uint8_t evseId);
@@ -162,11 +197,14 @@ private:
     s_ntpConfig ntpConfig;
     s_buttonConfig buttonConfig[1];
     s_systemConfig systemConfig;
+#ifdef ESP32
+    s_modbusConfig modbusConfig;
+#endif
     s_evseConfig evseConfig[1];
 
     bool configLoaded;
     bool pre_0_4_Config;
 
 protected:
-
+    String configFileName;
 };
