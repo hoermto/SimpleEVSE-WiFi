@@ -126,8 +126,12 @@ float voltageP3 = 0.0;
 #ifdef ESP8266
 SoftwareSerial SecondSer(D1, D2); //SoftwareSerial object (RX, TX)
 #else
-HardwareSerial SecondSer(2);
+Stream* evseSerial = nullptr;
+Stream* modbusSerial = nullptr;
+#endif
+
 //oLED
+#ifndef ESP8266
 unsigned long millisUpdateOled = 0;
 U8G2_SSD1327_WS_128X128_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/ 12, /* dc=*/ 13, /* reset=*/ 33);
 EvseWiFiOled oled;
@@ -2752,22 +2756,60 @@ void ICACHE_FLASH_ATTR startWebserver() {
 //////////////////////////////////////////////////////////////////////////////////////////
 void ICACHE_RAM_ATTR setup() {
   Serial.begin(9600);
-  if (config.getSystemDebug()) Serial.println();
-  if (config.getSystemDebug()) Serial.print("[ INFO ] EVSE-WiFi - version ");
-  if (config.getSystemDebug()) Serial.print(swVersion);
+  if (config.getSystemDebug())
+    Serial.println("\n[ INFO ] EVSE-WiFi - version " + String(swVersion));
   delay(500);
 
   SPI.begin();
   SPIFFS.begin();
-  #ifdef ESP8266
+
+// dynamic config for modbus and EVSE for ESP32 only
+// 8266 might be later. Focus is ESP32
+#ifdef ESP8266
   SecondSer.begin(9600);
   meterNode.begin(2, Serial);
-  #else
-  SecondSer.begin(9600, SERIAL_8N1, 22, 21);
-  meterNode.begin(2, SecondSer);
-  #endif
-  
   evseNode.begin(1, SecondSer);
+#else
+  // ESP32 support for dynamic enable of MODBUS and EVSE
+  // use case: use ESP32 D1 board with pin compatible function for EVSE 1.0
+
+  // initially load configuration file to get Modbus and EVSE connection info
+  // TODO: refactor depedency on startup of oled, loadConfig (which uses EVSE) and config.loadconfig();
+  config.loadConfig();
+
+  // modbus configuration
+  if (true == config.getModbusEnabled()) {
+    // we need hardware serial for reliable communication.
+    // use UART2 (hardware serial) for modbus interface
+    HardwareSerial *hwSer = new HardwareSerial(2);  //UART2
+    hwSer->begin(9600, SERIAL_8N1, config.getModbusRxPin(), config.getModbusTxPin());
+    modbusSerial = hwSer;
+    Serial.println("[ ModBus ] using hardware serial on pin rx/tx: " + String(config.getModbusRxPin()) + "/" + String(config.getModbusTxPin()));
+  }
+
+  // EVSE connection
+  if (true == config.getEvseUseModbus(0)) {
+    // assign the modbus serial for EVSE
+    evseSerial = modbusSerial;
+    Serial.println("[ EVSE ] using modbus");
+  } else {
+    // ESP32 has more HW serials, use UART1
+    HardwareSerial *hwSer = new HardwareSerial(1); // UART1
+    hwSer->begin(9600, SERIAL_8N1, config.getEvseSerialRxPin(0), config.getEvseSerialTxPin(0));
+    evseSerial = hwSer;
+    Serial.println("[ EVSE ] using UART1 serial on pin rx/pin: " + String(config.getEvseSerialRxPin(0)) + "/" + config.getEvseSerialTxPin(0));
+  }
+  if (nullptr != modbusSerial) {
+    meterNode.begin(2, *modbusSerial);
+  } else {
+    Serial.println("[ ModBus ] no modus interface configured, no modbus meter usable");
+  }
+  if (nullptr != evseSerial) {
+    evseNode.begin(1, *evseSerial);
+  } else {
+    Serial.println("[ EVSE ] no EVSE connection configured!");
+  }
+#endif
 
   #ifdef ESP32
   oled.begin(&u8g2, config.getEvseDisplayRotation(0));
