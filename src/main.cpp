@@ -298,10 +298,6 @@ void ICACHE_FLASH_ATTR changeLedTimes(uint16_t onTime, uint16_t offTime) {
   }
 }
 
-String ICACHE_FLASH_ATTR printIP(IPAddress address) {
-  return (String)address[0] + "." + (String)address[1] + "." + (String)address[2] + "." + (String)address[3];
-}
-
 bool ICACHE_FLASH_ATTR setSmartWb11kWSettings() {
   //Load and Save config file for smartWB
   if (config.saveConfigFile(SRC_CONFIG_TEMPLATE_SMARTWB11KW)) {
@@ -740,7 +736,7 @@ void ICACHE_FLASH_ATTR sendStatus() {
     struct softap_config conf;
     wifi_softap_get_config(&conf);
     jsonDoc["ssid"] = String(reinterpret_cast<char*>(conf.ssid));
-    jsonDoc["dns"] = printIP(WiFi.softAPIP());
+    jsonDoc["dns"] = WiFi.softAPIP().toString();
     jsonDoc["mac"] = WiFi.softAPmacAddress();
   }
   else {
@@ -749,15 +745,15 @@ void ICACHE_FLASH_ATTR sendStatus() {
     wifi_station_get_config(&conf);
     jsonDoc["ssid"] = String(reinterpret_cast<char*>(conf.ssid));
     jsonDoc["rssi"] = String(WiFi.RSSI());
-    jsonDoc["dns"] = printIP(WiFi.dnsIP());
+    jsonDoc["dns"] = WiFi.dnsIP().toString();
     jsonDoc["mac"] = WiFi.macAddress();
   }
   IPAddress ipaddr = IPAddress(info.ip.addr);
   IPAddress gwaddr = IPAddress(info.gw.addr);
   IPAddress nmaddr = IPAddress(info.netmask.addr);
 
-  jsonDoc["ip"] = printIP(ipaddr);
-  jsonDoc["netmask"] = printIP(nmaddr);
+  jsonDoc["ip"] = ipaddr.toString();
+  jsonDoc["netmask"] = nmaddr.toString();
 
   #else
   wifi_config_t conf;
@@ -768,7 +764,7 @@ void ICACHE_FLASH_ATTR sendStatus() {
   if (inAPMode) {
     esp_wifi_get_config(WIFI_IF_AP, &conf);
     jsonDoc["ssid"] = String(reinterpret_cast<char*>(conf.ap.ssid));
-    jsonDoc["dns"] = printIP(WiFi.softAPIP());
+    jsonDoc["dns"] = WiFi.softAPIP().toString();
     jsonDoc["mac"] = WiFi.softAPmacAddress();
     jsonDoc["ip"] = WiFi.softAPIP().toString();
     jsonDoc["netmask"] = printSubnet(WiFi.softAPSubnetCIDR());
@@ -777,7 +773,7 @@ void ICACHE_FLASH_ATTR sendStatus() {
     esp_wifi_get_config(WIFI_IF_STA, &conf);
     jsonDoc["ssid"] = String(reinterpret_cast<char*>(conf.sta.ssid));
     jsonDoc["rssi"] = String(WiFi.RSSI());
-    jsonDoc["dns"] = printIP(WiFi.dnsIP());
+    jsonDoc["dns"] = WiFi.dnsIP().toString();
     jsonDoc["mac"] = WiFi.macAddress();
     jsonDoc["ip"] = WiFi.localIP().toString();
     jsonDoc["netmask"] = WiFi.subnetMask().toString();
@@ -787,7 +783,7 @@ void ICACHE_FLASH_ATTR sendStatus() {
   #endif
 
   s_addEvseData addEvseData = getAdditionalEVSEData();
-  jsonDoc["gateway"] = printIP(gwaddr);
+  jsonDoc["gateway"] = gwaddr.toString();
   jsonDoc["evse_amps_conf"] = evseAmpsConfig;          //Reg 1000
   jsonDoc["evse_amps_out"] = evseAmpsOutput;           //Reg 1001
   jsonDoc["evse_vehicle_state"] = evseVehicleState;   //Reg 1002
@@ -2297,7 +2293,7 @@ bool ICACHE_FLASH_ATTR loadConfiguration(String configString = "") {
   const char * ntpserver = config.getNtpIp();
   IPAddress timeserverip;
   WiFi.hostByName(ntpserver, timeserverip);
-  String ip = printIP(timeserverip);
+  String ip = timeserverip.toString();
   if (config.getSystemDebug()) Serial.println(" IP: " + ip);
   uint8_t tz = config.getNtpTimezone();
   if (config.getNtpDst()) {
@@ -2571,7 +2567,7 @@ void ICACHE_FLASH_ATTR setWebEvents() {
         struct softap_config conf;
         wifi_softap_get_config(&conf);
         item["ssid"] = String(reinterpret_cast<char*>(conf.ssid));
-        item["dns"] = printIP(WiFi.softAPIP());
+        item["dns"] = WiFi.softAPIP().toString();
         item["mac"] = WiFi.softAPmacAddress();
       }
       else {
@@ -2580,7 +2576,7 @@ void ICACHE_FLASH_ATTR setWebEvents() {
         wifi_station_get_config(&conf);
         item["ssid"] = String(reinterpret_cast<char*>(conf.ssid));
         item["rssi"] = String(WiFi.RSSI());
-        item["dns"] = printIP(WiFi.dnsIP());
+        item["dns"] = WiFi.dnsIP().toString();
         item["mac"] = WiFi.macAddress();
       }
       #else
@@ -2590,14 +2586,14 @@ void ICACHE_FLASH_ATTR setWebEvents() {
       if (inAPMode) {
         esp_wifi_get_config(WIFI_IF_AP, &conf);
         item["ssid"] = String(reinterpret_cast<char*>(conf.ap.ssid));
-        item["dns"] = printIP(WiFi.softAPIP());
+        item["dns"] = WiFi.softAPIP().toString();
         item["mac"] = WiFi.softAPmacAddress();
       }
       else {
         esp_wifi_get_config(WIFI_IF_STA, &conf);
         item["ssid"] = String(reinterpret_cast<char*>(conf.sta.ssid));
         item["rssi"] = String(WiFi.RSSI());
-        item["dns"] = printIP(WiFi.dnsIP());
+        item["dns"] = WiFi.dnsIP().toString();
         item["mac"] = WiFi.macAddress();
       } 
       #endif
@@ -2605,9 +2601,9 @@ void ICACHE_FLASH_ATTR setWebEvents() {
       IPAddress ipaddr = IPAddress(info.ip.addr);
       IPAddress gwaddr = IPAddress(info.gw.addr);
       IPAddress nmaddr = IPAddress(info.netmask.addr);
-      item["ip"] = printIP(ipaddr);
-      item["gateway"] = printIP(gwaddr);
-      item["netmask"] = printIP(nmaddr);
+      item["ip"] = ipaddr.toString();
+      item["gateway"] = gwaddr.toString();
+      item["netmask"] = nmaddr.toString();
       item["uptime"] = ntp.getUptimeSec();
 
       serializeJson(jsonDoc, *response);
