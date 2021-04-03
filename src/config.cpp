@@ -1,6 +1,6 @@
 #include "config.h"
 #include "templates.h"
-#include <string.h>
+#include "syslog.h"
 
 EvseWiFiConfig::EvseWiFiConfig(const String cfgFile)
     : configFileName(cfgFile) {
@@ -32,23 +32,22 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::loadConfig(String givenConfig) {
     pre_0_4_Config = false;
     
     if (givenConfig != "") {
-        Serial.println("loadConfig: given config string ...");
+        sysLog.info(F("loadConfig: given config string ..."), SysLog::CONFIG);
         jsonString = givenConfig;
     }
     else {
         //SPIFFS.begin();
-        Serial.println("loadConfig: no config string given -> check config file");
+        sysLog.info(F("loadConfig: no config string given -> check config file"), SysLog::CONFIG);
         File configFile = SPIFFS.open(configFileName, "r");
         #ifdef ESP8266
         if (!configFile) {
-            Serial.println("loading config file failed");
+            sysLog.error(F("loading config file failed"), SysLog::CONFIG);
             return false;
         }
         #else
         if (!configFile.available()) {
             configFile.close();
-            Serial.println("loading config file failed - rebuild factory settings: ");
-            Serial.println(configFileName);
+            sysLog.warning(String(F("loading config file failed - rebuild factory settings: ")) + configFileName, SysLog::CONFIG);
             loadDefault = true;
         }
         #endif
@@ -66,16 +65,16 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::loadConfig(String givenConfig) {
     DynamicJsonDocument jsonDoc(2000);
     DeserializationError error = deserializeJson(jsonDoc, jsonString);
     if (error) {
-        Serial.println("parsing config file failed");
+        sysLog.error("parsing config file failed: " + String(error.c_str()), SysLog::CONFIG);
         return false;
     }
     
     if (!jsonDoc.containsKey("configversion")) {
         pre_0_4_Config = true;
-        Serial.println("pre 0.4 config file found...");
+        sysLog.info(F("pre 0.4 config file found..."), SysLog::CONFIG);
     }
     else {
-        Serial.println("actual config file found");
+        sysLog.info(F("actual config file found"), SysLog::CONFIG);
     }
 
     // wifiConfig
@@ -88,7 +87,7 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::loadConfig(String givenConfig) {
     wifiConfig.subnet = strdup(jsonDoc["wifi"]["subnet"]);
     wifiConfig.gateway = strdup(jsonDoc["wifi"]["gateway"]);
     wifiConfig.dns = strdup(jsonDoc["wifi"]["dns"]);
-    Serial.println("WIFI loaded");
+    sysLog.info(F("WIFI loaded"), SysLog::CONFIG);
 
     // meterConfig
     meterConfig[0].usemeter = jsonDoc["meter"][0]["usemeter"];
@@ -99,18 +98,19 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::loadConfig(String givenConfig) {
     meterConfig[0].implen = jsonDoc["meter"][0]["implen"];
     meterConfig[0].meterphase = jsonDoc["meter"][0]["meterphase"];
     meterConfig[0].factor = jsonDoc["meter"][0]["factor"];
-    Serial.println("METER loaded");
+    sysLog.info(F("Meter loaded"), SysLog::CONFIG);
 
     // rfidConfig
     rfidConfig.userfid = jsonDoc["rfid"]["userfid"];
     rfidConfig.sspin = jsonDoc["rfid"]["sspin"];
     rfidConfig.rfidgain = jsonDoc["rfid"]["rfidgain"];
-    Serial.println("RFID loaded");
+    sysLog.info(F("RFID loaded"), SysLog::CONFIG);
+
 
     // ntpConfig
     ntpConfig.timezone = jsonDoc["ntp"]["timezone"];
     ntpConfig.ntpip = strdup(jsonDoc["ntp"]["ntpip"]);
-    Serial.println("NTP loaded");
+    sysLog.info(F("NPD loaded"), SysLog::CONFIG);
     if (jsonDoc["ntp"].containsKey("dst")) {
         ntpConfig.dst = jsonDoc["ntp"]["dst"];
     }
@@ -121,13 +121,19 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::loadConfig(String givenConfig) {
     // buttonConfig
     buttonConfig[0].usebutton = jsonDoc["button"][0]["usebutton"];
     buttonConfig[0].buttonpin = jsonDoc["button"][0]["buttonpin"];
-    Serial.println("BUTTON loaded");
+    sysLog.info(F("BUTTON loaded"), SysLog::CONFIG);
+
 
     // systemConfig
     systemConfig.hostnm = strdup(jsonDoc["system"]["hostnm"]);
     systemConfig.adminpwd = strdup(jsonDoc["system"]["adminpwd"]);
     systemConfig.wsauth = jsonDoc["system"]["wsauth"];
     systemConfig.debug = jsonDoc["system"]["debug"];
+    if( systemConfig.debug ) {
+        sysLog.setLogLevel(SysLog::DEBUG);
+    } else {
+        sysLog.setLogLevel(SysLog::INFO);
+    }
     systemConfig.maxinstall = jsonDoc["system"]["maxinstall"];
     systemConfig.evsecount = jsonDoc["system"]["evsecount"];
     systemConfig.configversion = jsonDoc["configversion"];
@@ -143,7 +149,8 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::loadConfig(String givenConfig) {
     else {
         systemConfig.api = true;
     }
-    Serial.println("SYSTEM loaded");
+    sysLog.info(F("SYSTEM loaded"), SysLog::CONFIG);
+
 
 #ifdef ESP32
     // modbus config
@@ -158,7 +165,8 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::loadConfig(String givenConfig) {
         modbusConfig.rxPin = 22;
         modbusConfig.txPin = 21;
     }
-    Serial.println("MODBUS loaded");
+    sysLog.info(F("MODBUS loaded"), SysLog::CONFIG);
+
 #endif
 
     // evseConfig
@@ -186,7 +194,8 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::loadConfig(String givenConfig) {
 
     if (jsonDoc["evse"][0].containsKey("disableled")) {
         bool disableled = jsonDoc["evse"][0]["disableled"];
-        Serial.println(disableled);
+        sysLog.info(String("LED config: ") + disableled ? "disabled" : "enabled", SysLog::CONFIG);
+
         if (disableled == true) {
             evseConfig[0].ledconfig = 1;
         }
@@ -220,8 +229,8 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::loadConfig(String givenConfig) {
     else {
         evseConfig[0].remote = false;
     }
-    Serial.println("EVSE loaded");
-    Serial.println("loadConfig.. Check!");
+    sysLog.info(F("EVSE loaded"), SysLog::CONFIG);
+    sysLog.info(F("loadConfig.. Check!"), SysLog::CONFIG);
     configLoaded = true;
 
     return true;
@@ -232,25 +241,24 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::loadConfiguration() {
     useMMeter = false;
     useSMeter = false;
     if (meterConfig[0].usemeter == true) {
-        Serial.println("Use Meter");
         String type = meterConfig[0].metertype;
+        sysLog.info("Use meter type: " + type, SysLog::CONFIG);
         if (type == "S0") {
             useSMeter = true;
-            Serial.println("Use S0");
         }
         else if (type == "SDM120") {
             mMeterTypeSDM120 = true;
             useMMeter = true;
-            Serial.println("Use SDM120");
         }
         else if (type == "SDM630") {
             mMeterTypeSDM630 = true;
             useMMeter = true;
-            Serial.println("Use SDM630");
+        } else {
+            sysLog.error("Unknown meter type: " + type, SysLog::CONFIG);
         }
-    }
-
-    
+    } else {
+        sysLog.debug(F("no meter configured"), SysLog::CONFIG);
+    } 
 
     return true;
 }
@@ -268,13 +276,16 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::printConfigFile() {
     if (error) {
         return false;
     }
-    Serial.println(F("[ INFO ] Config File: "));
-    serializeJsonPretty(jsonDoc, Serial);
-    Serial.println();
+    String tmpJson;
+    serializeJsonPretty(jsonDoc, tmpJson);
+    sysLog.info(F("Config file:"), SysLog::CONFIG);
+    sysLog.info(tmpJson, SysLog::CONFIG);
     //SPIFFS.end();
     return true;
 }
 bool ICACHE_FLASH_ATTR EvseWiFiConfig::printConfig() {
+
+    // keep this as serial.print intentionally
     Serial.println("Printing Config... ---");
     Serial.println("// WiFi Config");
     Serial.println("bssid: " + String(getWifiBssid()));
@@ -346,14 +357,15 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::printConfig() {
     Serial.println("--- End of Config...");
     return true;
 }
+
 bool ICACHE_FLASH_ATTR EvseWiFiConfig::renewConfigFile() {
     if (configLoaded) {
         if (getSystemConfigVersion() == ACTUAL_CONFIG_VERSION) {  //Config is up to date
-            Serial.println("[ SYSTEM ] Config file already up to date.");
+            sysLog.info(F("Config file already up to date."), SysLog::CONFIG);
             return true;
         }
         else {  // Config must be updated
-            Serial.println("[ SYSTEM ] Config file has to be updated...");
+            sysLog.info(F("Config file has to be updated..."), SysLog::CONFIG);
             if (updateConfig(getConfigJson())) {
                 return true;
             }
@@ -361,6 +373,7 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::renewConfigFile() {
     }
     return false;
 }
+
 String ICACHE_FLASH_ATTR EvseWiFiConfig::getConfigJson() {
     DynamicJsonDocument rootDoc(2000);
     rootDoc["configversion"] = ACTUAL_CONFIG_VERSION;
@@ -458,12 +471,12 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::checkUpdateConfig(String jsonString, bool
     DynamicJsonDocument jsonDoc(2000);
     DeserializationError error = deserializeJson(jsonDoc, jsonString);
     if (error) {
-        Serial.println("parsing config file failed");
+        sysLog.error("parsing config file failed: " + String(error.c_str()), SysLog::CONFIG);
         return false;
     }
     bool err = false;
     if (this->getEvseAlwaysActive(0) == true && jsonDoc["evse"][0]["alwaysactive"] == false) {  // switch from AA/Remote to Normal mode
-        if (this->getSystemDebug()) Serial.println("[ SYSTEM ] Switched from AA/Remote to normal mode -> going to set Register 2005...");
+        sysLog.debug(F("Switched from AA/Remote to normal mode -> going to set Register 2005..."), SysLog::CONFIG);
         for (int i = 0; i < 5; i++) {
             if (setEVSERegister(2005, 16448)){
                 break;
@@ -472,12 +485,12 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::checkUpdateConfig(String jsonString, bool
             delay(150);
         }
         if (err) {
-            Serial.println("[ ERROR ] Register 2005 could not be set (switch from AA/Remote to normal mode)");
+            sysLog.error(F("Register 2005 could not be set (switch from AA/Remote to normal mode)"), SysLog::CONFIG);
             return false;
         } 
     }   
     else {
-        if (this->getSystemDebug()) Serial.println("[ SYSTEM ] No Register to Set (switch from AA/Remote to normal mode)");
+        sysLog.debug(F("No Register to Set (switch from AA/Remote to normal mode)"), SysLog::CONFIG);
     }
     return true;
 }
@@ -508,14 +521,14 @@ bool ICACHE_FLASH_ATTR EvseWiFiConfig::saveConfigFile(String jsonString) {
         configFile = SPIFFS.open(configFileName, "r");
         if (configFile) {
             if (systemConfig.debug) {
-                Serial.println("[ SYSTEM ] New config file created:");
+                sysLog.debug(F("New config file created:"), SysLog::CONFIG);
                 while (configFile.available()) {
                     Serial.write(configFile.read());
                 }
-                Serial.println("[ SYSTEM ] End of new config file");
+                sysLog.debug(F("End of new config file"), SysLog::CONFIG);
             }
             else {
-                Serial.println("[ SYSTEM ] New config file created");
+                sysLog.info(F("New config file created"), SysLog::CONFIG);
             }
             configFile.close();
             //SPIFFS.end();

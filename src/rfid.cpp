@@ -1,4 +1,6 @@
 #include <rfid.h>
+#include "syslog.h"
+
 
 MFRC522 mfrc522 = MFRC522();
 
@@ -9,8 +11,7 @@ bool ICACHE_FLASH_ATTR EvseWiFiRfid::begin(int rfidss, bool usePN532, int rfidga
   delay(50);
   mfrc522.PCD_Init(rfidss, 0);
   delay(50);
-  if (debug) Serial.printf("[ INFO ] RFID SS_PIN: %u and Gain Factor: %u", rfidss, rfidgain);
-  if (debug) Serial.println("");
+  sysLog.debug("RFID SS_PIN: " + String(rfidss) + " and Gain Factor: " + String(rfidgain), SysLog::RFID);
   delay(50);
   printReaderDetails();
   return true;
@@ -19,24 +20,15 @@ bool ICACHE_FLASH_ATTR EvseWiFiRfid::begin(int rfidss, bool usePN532, int rfidga
 void ICACHE_FLASH_ATTR EvseWiFiRfid::printReaderDetails() {
   // Get the MFRC522 software version 
   byte v = mfrc522.PCD_ReadRegister(mfrc522.VersionReg);
-  if (this->debug) Serial.print(F("[ INFO ] MFRC522 Version: 0x"));
-  if (this->debug) Serial.print(v, HEX);
-  if (v == 0x91) {
-    if (this->debug) Serial.print(F(" = v1.0"));
+  String ver = "unknown";
+  switch(v) {
+    case 0x91: ver = "v1.0"; break;
+    case 0x92: ver = "v2.0"; break;
+    case 0x88: ver = "clone"; break;
   }
-  else if (v == 0x92) {
-    if (this->debug) Serial.print(F(" = v2.0"));
-  }
-  else if (v == 0x88) {
-    if (this->debug) Serial.print(F(" = clone"));
-  }
-  else {
-    if (this->debug) Serial.print(F(" (unknown)"));
-  }
-  if (this->debug) Serial.println("");
-  // When 0x00 or 0xFF is returned, communication probably failed
+  sysLog.debug("MFRC522 Version: 0x" + String(v,HEX) + ver, SysLog::RFID);
   if ((v == 0x00) || (v == 0xFF)) {
-    if (this->debug) Serial.println(F("[ WARN ] Communication failure, check if MFRC522 properly connected"));
+    sysLog.error(F("Communication failure, check if MFRC522 properly connected"), SysLog::RFID);
   }
 }
 
@@ -56,20 +48,21 @@ scanResult ICACHE_FLASH_ATTR EvseWiFiRfid::readPicc() {
       return res;
     }
     res.read = true;
-    Serial.println("[ RFID ] Card detected to read!"); ///DEBUG
+    sysLog.debug(F("Card detected to read!"), SysLog::RFID);
     mfrc522.PICC_HaltA();
     this->cooldown = millis() + 3000;
-    if (this->debug) Serial.print(F("[ INFO ] PICC's UID: "));
+
     String uid = "";
     for (int i = 0; i < mfrc522.uid.size; ++i) {
       uid += String(mfrc522.uid.uidByte[i], HEX);
     }
     res.uid = uid;
-    if (this->debug) Serial.print(uid);
+    sysLog.debug("PICC's UID: " + uid, SysLog::RFID);
+
     MFRC522::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
     String type = mfrc522.PICC_GetTypeName(piccType);
     res.type = type;
-  
+
     //SPIFFS.begin();
     int AccType = 0;
     String filename = "/P/";
@@ -91,30 +84,25 @@ scanResult ICACHE_FLASH_ATTR EvseWiFiRfid::readPicc() {
       if (!error) {
         res.user = strdup(jsonDoc["user"]);
         AccType = jsonDoc["acctype"];
-        if (this->debug) Serial.println(" = known PICC");
-        if (this->debug) Serial.print("[ INFO ] User Name: ");
+        sysLog.debug(F(" = known PICC"), SysLog::RFID);
+
+        String usrTmp = res.user;
         if (res.user == "undefined") {
-          if (this->debug) Serial.print(res.uid);
+          String usrTmp = res.uid;
         }
-        else {
-          if (this->debug) Serial.print(res.user);
-        }
+
         if ((AccType == 1 || AccType == 99) &&
             ntpClient->getUtcTimeNow() < jsonDoc["validuntil"]) {
-          if (this->debug) Serial.println(" have permission");
           res.valid = true;
         }
-        else {
-          if (this->debug) Serial.println(" does not have permission");
-        }
+        sysLog.debug("User Name: " + res.uid + " has permission: " + res.valid ? "true" : "false", SysLog::RFID);
       }
       else {
-        if (this->debug) Serial.println("");
-        if (this->debug) Serial.println(F("[ WARN ] Failed to parse User Data"));
+        sysLog.warning(F("Failed to parse User Data"), SysLog::RFID);
       }
     }
     else { // Unknown PICC
-      if (this->debug) Serial.println(" = unknown PICC");
+      sysLog.warning(F(" = unknown PICC"), SysLog::RFID);
     }
     rfidFile.close();
     //SPIFFS.end();
@@ -123,8 +111,7 @@ scanResult ICACHE_FLASH_ATTR EvseWiFiRfid::readPicc() {
 }
 
 DynamicJsonDocument ICACHE_FLASH_ATTR EvseWiFiRfid::getUserList(int page) {
-  Serial.print("getUserlist - Page: ");
-  Serial.println(page);
+  sysLog.info("getUserlist - Page: " + String(page), SysLog::RFID);
   DynamicJsonDocument jsonDoc(3000);
   jsonDoc["command"] = "userlist";
   jsonDoc["page"] = page;

@@ -32,9 +32,9 @@ void SysLog::log(const String msg, const Module_t module, const Level_t level) {
     // log time
     time_t tm = ntp.getUtcTimeNow();
     // if synchronized, use timestamp, otherwise uptime
-    char buff[20];
+    char buff[25];
     if( tm > 10*12*30*24*3600 ) { // assume any date > 10yrs after 1970 means ntp synchronized
-        strftime(buff, 20, "(%Y-%m-%d %H:%M:%S)", localtime(&tm));
+        strftime(buff, 25, "(%Y-%m-%d %H:%M:%S)", localtime(&tm));
     } else {
         deviceUptime uptime = ntp.getDeviceUptime();
         sprintf(buff, "(%ud %02d:%02d:%02d)", uptime.days, uptime.hours, uptime.mins, uptime.secs);
