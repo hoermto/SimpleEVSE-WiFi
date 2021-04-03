@@ -5,8 +5,7 @@
  *      Author: joe
  */
 
-#ifndef NTP_H_
-#define NTP_H_
+#pragma once
 
 #ifdef ESP8266
 #include <ESP8266WiFi.h>
@@ -21,10 +20,10 @@
 #define NTP_PACKET_SIZE 48
 
 struct deviceUptime {
-	long days;
-	long hours;
-	long mins;
-	long secs;
+	uint32_t days;
+	uint32_t hours;
+	uint32_t mins;
+	uint32_t secs;
 };
 
 class NtpClient {
@@ -57,4 +56,5 @@ protected:
 	time_t _uptimesec = 0;
 };
 
-#endif /* NTP_H_ */
+// singleton
+extern NtpClient ntp;

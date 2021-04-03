@@ -144,7 +144,6 @@ ModbusMaster meterNode;
 ModbusIP modbusTCPServerNode;  //ModbusIP object
 AsyncWebServer server(80);    // Create AsyncWebServer instance on port "80"
 AsyncWebSocket ws("/ws");     // Create WebSocket instance on URL "/ws"
-NtpClient ntp;
 EvseWiFiConfig config = EvseWiFiConfig("/config.json");
 EvseWiFiRfid rfid;
 

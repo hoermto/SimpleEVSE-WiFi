@@ -92,13 +92,13 @@ time_t NtpClient::getUptimeSec() {
 }
 
 deviceUptime ICACHE_FLASH_ATTR NtpClient::getDeviceUptime() {
-  unsigned long currentmillis = millis();
+  uint32_t currentmillis = millis();
 
   deviceUptime uptime;
-  uptime.secs  = (long)((currentmillis / 1000) % 60);
-  uptime.mins  = (long)((currentmillis / 60000) % 60);
-  uptime.hours = (long)((currentmillis / 3600000) % 24);
-  uptime.days  = (long)((currentmillis / 86400000) % 10);
+  uptime.secs  = ((currentmillis / 1000) % 60);
+  uptime.mins  = ((currentmillis / 60000) % 60);
+  uptime.hours = ((currentmillis / 3600000) % 24);
+  uptime.days  = ((currentmillis / 86400000) % 10);
 
   return uptime;
 }
@@ -115,3 +115,5 @@ String ICACHE_FLASH_ATTR NtpClient::getDeviceUptimeString() {
 ICACHE_FLASH_ATTR time_t NtpClient::getUtcTimeNow() {
   return now() + (timezone * 3600);
 }
+
+NtpClient ntp;
